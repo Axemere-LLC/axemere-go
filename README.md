@@ -1,5 +1,7 @@
 # Axemere AI Gateway — Go SDK
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Add governance, cost controls, and audit trails to every AI API call — without changing your application code.
 
 **[Get started at axemere.ai →](https://axemere.ai)**
