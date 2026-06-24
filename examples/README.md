@@ -1,5 +1,7 @@
 # Axemere AI Gateway — Go Examples
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../LICENSE)
+
 Eight standalone programs covering the gateway's core capabilities. Each compiles and runs independently against a local or managed gateway.
 
 ## Setup
