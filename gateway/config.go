@@ -129,7 +129,11 @@ func NewConfig(opts ...Option) (*Config, error) {
 	return cfg, nil
 }
 
-// SetDefaults applies additional functional options to an existing Config.
+// SetDefaults applies functional options to an existing Config in place.
+//
+// Each option REPLACES the corresponding field; it does not merge. For example,
+// WithLabels swaps the entire Labels map rather than adding to it. Options are
+// applied in order, so the last option for a given field wins.
 func (c *Config) SetDefaults(opts ...Option) {
 	for _, opt := range opts {
 		opt(c)

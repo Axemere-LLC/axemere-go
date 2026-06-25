@@ -39,14 +39,16 @@ func main() {
 	// The gateway strips all labeled segments before forwarding to the upstream.
 	// Any HTTP client or third-party SDK can use this as its base URL.
 	proxyBase := cfg.ProxyURL("openai")
-	fmt.Printf("Proxy base URL: %s\n", proxyBase)
+	// The gateway token is embedded in the URL path (/k/<token>); never log the
+	// raw URL. Print a redacted form for visibility only.
+	fmt.Printf("Proxy base URL: %s\n", redactProxyURL(proxyBase))
 
 	// OpenAI's SDK appends /chat/completions (without /v1) to its base URL,
 	// so we append /v1 to the proxy base. The gateway stops parsing attribution
 	// labels at the first non-label segment (/v1) and forwards /v1/chat/completions
 	// verbatim to api.openai.com.
 	endpoint := strings.TrimRight(proxyBase, "/") + "/v1/chat/completions"
-	fmt.Printf("POST %s\n\n", endpoint)
+	fmt.Printf("POST %s\n\n", redactProxyURL(endpoint))
 
 	// Build an OpenAI-format request body.
 	body := map[string]any{
@@ -111,6 +113,19 @@ func main() {
 	if recordID := resp.Header.Get("X-MVGC-Record-ID"); recordID != "" {
 		fmt.Printf("Record ID (header): %s\n", recordID)
 	}
+}
+
+// redactProxyURL masks the token segment (/k/<token>) in a proxy URL so it can
+// be logged safely. The gateway token lives in the URL path and must never be
+// written to logs, terminals, or error messages in full.
+func redactProxyURL(u string) string {
+	parts := strings.Split(u, "/")
+	for i := 0; i < len(parts)-1; i++ {
+		if parts[i] == "k" {
+			parts[i+1] = "***"
+		}
+	}
+	return strings.Join(parts, "/")
 }
 
 // extractOpenAIContent pulls the assistant message text from an OpenAI response.

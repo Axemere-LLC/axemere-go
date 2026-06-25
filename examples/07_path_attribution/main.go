@@ -124,7 +124,9 @@ func main() {
 		)
 		proxyBase := custCfg.ProxyURL("openai")
 		endpoint := strings.TrimRight(proxyBase, "/") + "/v1/chat/completions"
-		fmt.Printf("Customer %s: POST %s\n", cust.id, proxyBase)
+		// The gateway token is embedded in the proxy URL path (/k/<token>); print a
+		// redacted form so the token is never logged.
+		fmt.Printf("Customer %s: POST %s\n", cust.id, redactProxyURL(proxyBase))
 
 		body := map[string]any{
 			"model":      "gpt-4o-mini",
@@ -187,6 +189,19 @@ func extractOpenAIContent(raw map[string]any) string {
 	}
 	content, _ := msg["content"].(string)
 	return content
+}
+
+// redactProxyURL masks the token segment (/k/<token>) in a proxy URL so it can
+// be logged safely. The gateway token lives in the URL path and must never be
+// written to logs, terminals, or error messages in full.
+func redactProxyURL(u string) string {
+	parts := strings.Split(u, "/")
+	for i := 0; i < len(parts)-1; i++ {
+		if parts[i] == "k" {
+			parts[i+1] = "***"
+		}
+	}
+	return strings.Join(parts, "/")
 }
 
 func isConnRefused(err error) bool {

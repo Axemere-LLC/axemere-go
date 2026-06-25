@@ -35,8 +35,14 @@ func main() {
 	}
 
 	// --- Full streaming response ---
+	// Always pair Stream with a cancellable context and defer cancel(): the SDK
+	// runs a background goroutine that only stops when the channel is drained OR
+	// the context is cancelled. defer cancel() guarantees that goroutine is freed
+	// even if we return early without reading every chunk.
 	fmt.Println("=== Streaming response (OpenAI gpt-4o-mini) ===")
-	demoStream(client, cfg, context.Background(), "Count from 1 to 10, one number per line.")
+	fullCtx, fullCancel := context.WithCancel(context.Background())
+	defer fullCancel()
+	demoStream(client, cfg, fullCtx, "Count from 1 to 10, one number per line.")
 
 	// --- Context cancellation demo ---
 	fmt.Println("\n=== Streaming with 2s timeout (context cancellation) ===")

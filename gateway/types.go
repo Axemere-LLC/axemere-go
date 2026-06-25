@@ -34,8 +34,8 @@ type Metering struct {
 // ExecuteRequest describes a single governed action request.
 type ExecuteRequest struct {
 	Messages        []Message
-	Provider        string            // overrides Config.DefaultProvider; required if not set in Config
-	Model           string            // overrides Config.DefaultModel; required if not set in Config
+	Provider        string // overrides Config.DefaultProvider; required if not set in Config
+	Model           string // overrides Config.DefaultModel; required if not set in Config
 	WorkloadID      string
 	ProjectID       string
 	AccountID       string

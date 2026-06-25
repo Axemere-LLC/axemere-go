@@ -37,13 +37,13 @@ func main() {
 	}
 
 	type result struct {
-		provider string
-		model    string
-		content  string
-		tokensIn int
+		provider  string
+		model     string
+		content   string
+		tokensIn  int
 		tokensOut int
-		costUSD  string
-		err      error
+		costUSD   string
+		err       error
 	}
 
 	providers := []struct {

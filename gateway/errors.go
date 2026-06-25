@@ -5,9 +5,15 @@ type GatewayError struct {
 	Message      string
 	StatusCode   int
 	ResponseBody map[string]any
+	// Err is the underlying error (e.g. a transport error), if any.
+	// It enables errors.Is/errors.As to inspect the wrapped cause.
+	Err error
 }
 
 func (e *GatewayError) Error() string { return e.Message }
+
+// Unwrap returns the underlying error so callers can use errors.Is/errors.As.
+func (e *GatewayError) Unwrap() error { return e.Err }
 
 // PolicyDeniedError is returned when the gateway policy engine denies a request.
 type PolicyDeniedError struct {

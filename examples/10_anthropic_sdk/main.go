@@ -88,7 +88,9 @@ func main() {
 	proxyBase := strings.TrimRight(cfg.ProxyURL("anthropic"), "/")
 	fmt.Printf("Gateway: %s\n", cfg.GatewayURL)
 	fmt.Printf("Workload: %s  Project: %s\n", cfg.WorkloadID, cfg.ProjectID)
-	fmt.Printf("Proxy base URL: %s\n", proxyBase)
+	// The gateway token is embedded in the proxy URL path (/k/<token>); never log
+	// the raw URL. Print a redacted form for visibility only.
+	fmt.Printf("Proxy base URL: %s\n", redactProxyURL(proxyBase))
 
 	client := anthropic.NewClient(
 		option.WithBaseURL(proxyBase),
@@ -117,6 +119,19 @@ func main() {
 
 	demoSingleMessage(ctx, client)
 	demoMultiTurn(ctx, client)
+}
+
+// redactProxyURL masks the token segment (/k/<token>) in a proxy URL so it can
+// be logged safely. The gateway token lives in the URL path and must never be
+// written to logs, terminals, or error messages in full.
+func redactProxyURL(u string) string {
+	parts := strings.Split(u, "/")
+	for i := 0; i < len(parts)-1; i++ {
+		if parts[i] == "k" {
+			parts[i+1] = "***"
+		}
+	}
+	return strings.Join(parts, "/")
 }
 
 func loadDotEnv(filename string) {

@@ -21,7 +21,7 @@ The [Axemere AI Gateway](https://axemere.ai) sits between your application and A
 ## Install
 
 ```bash
-go get github.com/axemere-llc/axemere-go/gateway
+go get github.com/Axemere-LLC/axemere-go/gateway
 ```
 
 ## Quick start
@@ -34,12 +34,18 @@ import (
     "fmt"
     "log"
 
-    "github.com/axemere-llc/axemere-go/gateway"
+    "github.com/Axemere-LLC/axemere-go/gateway"
 )
 
 func main() {
-    cfg := gateway.ConfigFromEnv() // reads AXEMERE_GATEWAY_URL, AXEMERE_WORKLOAD_TOKEN
-    client := gateway.NewClient(cfg)
+    cfg, err := gateway.NewConfig() // reads AXEMERE_GATEWAY_URL, AXEMERE_GATEWAY_TOKEN
+    if err != nil {
+        log.Fatal(err)
+    }
+    client, err := gateway.NewClient(cfg)
+    if err != nil {
+        log.Fatal(err)
+    }
 
     result, err := client.Execute(context.Background(), gateway.ExecuteRequest{
         Provider: "openai",
@@ -68,14 +74,14 @@ See [`examples/`](examples/) for 10 runnable programs covering all major provide
 
 ```bash
 cd examples/01_basic_chat
-AXEMERE_GATEWAY_URL=http://localhost:7080 AXEMERE_WORKLOAD_TOKEN=your-token go run .
+AXEMERE_GATEWAY_URL=http://localhost:7080 AXEMERE_GATEWAY_TOKEN=your-token go run .
 ```
 
 ## Requirements
 
-- Go 1.21+
+- Go 1.24+
 - A running Axemere AI Gateway (`AXEMERE_GATEWAY_URL`)
-- A workload token (`AXEMERE_WORKLOAD_TOKEN`)
+- A gateway token (`AXEMERE_GATEWAY_TOKEN`)
 
 ## Links
 

@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 
@@ -16,15 +18,18 @@ import (
 // Client is the Axemere Gateway SDK client.
 // Create one via NewClient; it is safe for concurrent use.
 type Client struct {
-	cfg           *Config
-	httpClient    *http.Client
-	streamClient  *http.Client
+	cfg          *Config
+	httpClient   *http.Client
+	streamClient *http.Client
 }
 
 // NewClient creates a new Client from the provided Config.
 func NewClient(cfg *Config) (*Client, error) {
 	if cfg == nil {
 		return nil, &GatewayError{Message: "config must not be nil"}
+	}
+	if cfg.GatewayURL == "" {
+		return nil, fmt.Errorf("GatewayURL is required; set AXEMERE_GATEWAY_URL or use WithGatewayURL()")
 	}
 	return &Client{
 		cfg: cfg,
@@ -41,11 +46,10 @@ func NewClient(cfg *Config) (*Client, error) {
 
 // Execute sends a single governed request to the gateway and returns the full response.
 func (c *Client) Execute(ctx context.Context, req ExecuteRequest) (*ExecuteResponse, error) {
-	body, route, err := c.buildRequest(req)
+	body, _, err := c.buildRequest(req)
 	if err != nil {
 		return nil, err
 	}
-	_ = route
 
 	endpoint := strings.TrimRight(c.cfg.GatewayURL, "/") + "/v1/actions:execute"
 
@@ -68,13 +72,13 @@ func (c *Client) Execute(ctx context.Context, req ExecuteRequest) (*ExecuteRespo
 		if isTimeoutErr(err) {
 			return nil, &GatewayTimeoutError{}
 		}
-		return nil, &GatewayError{Message: err.Error()}
+		return nil, &GatewayError{Message: err.Error(), Err: err}
 	}
 	defer resp.Body.Close()
 
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, &GatewayError{Message: "read response: " + err.Error(), StatusCode: resp.StatusCode}
+		return nil, &GatewayError{Message: "read response: " + err.Error(), StatusCode: resp.StatusCode, Err: err}
 	}
 
 	return parseExecuteResponse(resp.StatusCode, respBytes)
@@ -82,7 +86,17 @@ func (c *Client) Execute(ctx context.Context, req ExecuteRequest) (*ExecuteRespo
 
 // Stream sends a governed streaming request. It returns a channel that delivers
 // StreamChunk values. The channel is closed after the final chunk or on error.
-// The caller must drain the channel to avoid leaking the background goroutine.
+//
+// IMPORTANT: the caller MUST cancel the context when finished reading — not just
+// break out of the range loop. A background goroutine reads from the network and
+// sends on the returned channel; it only unblocks when the channel is fully drained
+// OR the context is cancelled. If you stop ranging early without cancelling, that
+// goroutine leaks until the stream completes on its own. The idiomatic pattern is:
+//
+//	ctx, cancel := context.WithCancel(ctx)
+//	defer cancel()
+//	ch, err := client.Stream(ctx, req)
+//	// ... range over ch; defer cancel() guarantees cleanup on early return.
 func (c *Client) Stream(ctx context.Context, req ExecuteRequest) (<-chan StreamChunk, error) {
 	body, _, err := c.buildRequest(req)
 	if err != nil {
@@ -114,7 +128,7 @@ func (c *Client) Stream(ctx context.Context, req ExecuteRequest) (<-chan StreamC
 		if isTimeoutErr(err) {
 			return nil, &GatewayTimeoutError{}
 		}
-		return nil, &GatewayError{Message: err.Error()}
+		return nil, &GatewayError{Message: err.Error(), Err: err}
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -212,9 +226,16 @@ func (c *Client) buildRequest(req ExecuteRequest) (actionRequest, providerRoute,
 		credHint = c.cfg.ProviderAPIKey
 	}
 
+	// Prefer a time-ordered UUIDv7; fall back to v4 if the system clock/entropy
+	// source rejects v7 rather than panicking on an otherwise-valid request.
+	requestID, err := uuid.NewV7()
+	if err != nil {
+		requestID = uuid.New()
+	}
+
 	ar := actionRequest{
 		Schema:          "mvgc.action_request.v2",
-		RequestID:       uuid.Must(uuid.NewV7()).String(),
+		RequestID:       requestID.String(),
 		OrgID:           "",
 		WorkloadID:      workloadID,
 		IngressMode:     "explicit_action_request",
@@ -266,7 +287,7 @@ func parseExecuteResponse(statusCode int, body []byte) (*ExecuteResponse, error)
 	}
 
 	// Check for quota exceeded.
-	if statusCode == http.StatusPaymentRequired || statusCode == 429 {
+	if statusCode == http.StatusPaymentRequired || statusCode == http.StatusTooManyRequests {
 		msg, _ := raw["message"].(string)
 		if msg == "" {
 			msg = fmt.Sprintf("quota exceeded (status %d)", statusCode)
@@ -371,6 +392,9 @@ func extractContent(raw map[string]any) string {
 // It is run in a goroutine; ch is closed by the caller after this returns.
 func readSSE(ctx context.Context, r io.Reader, ch chan<- StreamChunk) {
 	scanner := bufio.NewScanner(r)
+	// Raise the per-line cap to 1MB; SSE data lines (full JSON events) can exceed
+	// the default 64KB bufio.Scanner limit and would otherwise abort the stream.
+	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	var recordID string
 	var metering *Metering
 
@@ -478,35 +502,18 @@ func readSSE(ctx context.Context, r io.Reader, ch chan<- StreamChunk) {
 }
 
 // isTimeoutErr reports whether err is a deadline exceeded / timeout error.
+// It relies on the error chain (errors.Is / errors.As) rather than string
+// matching, so it correctly identifies context deadlines and net.Error timeouts.
 func isTimeoutErr(err error) bool {
 	if err == nil {
 		return false
 	}
-	s := err.Error()
-	return strings.Contains(s, "context deadline exceeded") ||
-		strings.Contains(s, "timeout") ||
-		strings.Contains(s, "deadline exceeded") ||
-		isNetTimeoutErr(err)
-}
-
-func isNetTimeoutErr(err error) bool {
-	type timeoutError interface {
-		Timeout() bool
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
 	}
-	var te timeoutError
-	// Walk the error chain.
-	for e := err; e != nil; {
-		if t, ok := e.(timeoutError); ok && t.Timeout() {
-			return true
-		}
-		// Unwrap one level.
-		type unwrapper interface{ Unwrap() error }
-		if u, ok := e.(unwrapper); ok {
-			e = u.Unwrap()
-		} else {
-			break
-		}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
 	}
-	return te != nil
+	return false
 }
-
