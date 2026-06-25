@@ -1,4 +1,4 @@
-module github.com/axemere-llc/axemere-go
+module github.com/Axemere-LLC/axemere-go
 
 go 1.24
 

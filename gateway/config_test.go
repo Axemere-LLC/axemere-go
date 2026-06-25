@@ -4,10 +4,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/axemere-llc/axemere-go/gateway"
+	"github.com/Axemere-LLC/axemere-go/gateway"
 )
 
 func TestNewConfig_Defaults(t *testing.T) {
+	// Clear env vars that may be set in the developer's shell to ensure defaults are tested in isolation.
+	for _, key := range []string{"AXEMERE_GATEWAY_URL", "AXEMERE_WORKLOAD_ID", "AXEMERE_PROVIDER", "AXEMERE_MODEL", "AXEMERE_TIMEOUT_SECONDS", "AXEMERE_LABELS"} {
+		t.Setenv(key, "")
+	}
 	cfg, err := gateway.NewConfig()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

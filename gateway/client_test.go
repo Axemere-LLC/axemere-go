@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/axemere-llc/axemere-go/gateway"
+	"github.com/Axemere-LLC/axemere-go/gateway"
 )
 
 // makeClient creates a Client pointed at the given server URL.

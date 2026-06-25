@@ -12,7 +12,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/axemere-llc/axemere-go/gateway"
+	"github.com/Axemere-LLC/axemere-go/gateway"
 )
 
 func main() {

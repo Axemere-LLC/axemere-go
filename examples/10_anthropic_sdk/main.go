@@ -14,7 +14,7 @@ import (
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
 
-	"github.com/axemere-llc/axemere-go/gateway"
+	"github.com/Axemere-LLC/axemere-go/gateway"
 )
 
 func extractText(blocks []anthropic.ContentBlockUnion) string {

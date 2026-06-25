@@ -14,7 +14,7 @@ import (
 	openai "github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 
-	"github.com/axemere-llc/axemere-go/gateway"
+	"github.com/Axemere-LLC/axemere-go/gateway"
 )
 
 func demoSingleCompletion(ctx context.Context, client openai.Client) {
