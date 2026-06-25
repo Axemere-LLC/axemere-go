@@ -11,7 +11,7 @@ type providerRoute struct {
 var providerRoutes = map[string]providerRoute{
 	"openai":     {"api.openai.com", "/v1/chat/completions"},
 	"anthropic":  {"api.anthropic.com", "/v1/messages"},
-	"google":     {"generativelanguage.googleapis.com", "/v1beta/models/{model}:generateContent"},
+	"gemini":     {"generativelanguage.googleapis.com", "/v1beta/models/{model}:generateContent"},
 	"cohere":     {"api.cohere.com", "/v2/chat"},
 	"mistral":    {"api.mistral.ai", "/v1/chat/completions"},
 	"groq":       {"api.groq.com", "/openai/v1/chat/completions"},
@@ -23,7 +23,7 @@ var providerRoutes = map[string]providerRoute{
 	"xai":        {"api.x.ai", "/v1/chat/completions"},
 	"perplexity": {"api.perplexity.ai", "/chat/completions"},
 	"openrouter": {"openrouter.ai", "/api/v1/chat/completions"},
-	"nvidia_nim": {"integrate.api.nvidia.com", "/v1/chat/completions"},
+	"nvidia-nim": {"integrate.api.nvidia.com", "/v1/chat/completions"},
 	"upstage":    {"api.upstage.ai", "/v1/chat/completions"},
 	"fireworks":  {"api.fireworks.ai", "/inference/v1/chat/completions"},
 }

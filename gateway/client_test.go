@@ -435,6 +435,40 @@ func TestStream_PolicyDeniedOnConnect(t *testing.T) {
 	}
 }
 
+func TestExecute_CredentialHint(t *testing.T) {
+	var captured map[string]any
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			http.Error(w, "bad body", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"record_id": "rec_cred",
+			"metering":  map[string]any{"cost_usd": "0", "tokens_in": 0, "tokens_out": 0},
+			"provider_response": map[string]any{
+				"choices": []any{map[string]any{"message": map[string]any{"content": "ok"}}},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	c := makeClient(t, srv.URL)
+	_, err := c.Execute(context.Background(), gateway.ExecuteRequest{
+		Messages:       []gateway.Message{{Role: "user", Content: "hi"}},
+		Provider:       "openai",
+		Model:          "gpt-4o",
+		ProviderAPIKey: "sk-byok-test",
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if captured["credential_hint"] != "sk-byok-test" {
+		t.Errorf("want credential_hint sk-byok-test, got %v", captured["credential_hint"])
+	}
+}
+
 func TestNewClient_NilConfig(t *testing.T) {
 	_, err := gateway.NewClient(nil)
 	if err == nil {

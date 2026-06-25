@@ -164,6 +164,34 @@ func TestConfig_ProxyURL(t *testing.T) {
 	}
 }
 
+func TestNewConfig_AdditionalEnvVars(t *testing.T) {
+	t.Setenv("AXEMERE_GATEWAY_TOKEN", "tok_env_test")
+	t.Setenv("AXEMERE_PROJECT_ID", "proj_env_test")
+	t.Setenv("AXEMERE_ACCOUNT_ID", "acct_env_test")
+	t.Setenv("AXEMERE_CUSTOMER_ID", "cust_env_test")
+	t.Setenv("AXEMERE_PROVIDER_API_KEY", "sk-byok-test")
+
+	cfg, err := gateway.NewConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.GatewayToken != "tok_env_test" {
+		t.Errorf("want GatewayToken tok_env_test, got %q", cfg.GatewayToken)
+	}
+	if cfg.ProjectID != "proj_env_test" {
+		t.Errorf("want ProjectID proj_env_test, got %q", cfg.ProjectID)
+	}
+	if cfg.AccountID != "acct_env_test" {
+		t.Errorf("want AccountID acct_env_test, got %q", cfg.AccountID)
+	}
+	if cfg.CustomerID != "cust_env_test" {
+		t.Errorf("want CustomerID cust_env_test, got %q", cfg.CustomerID)
+	}
+	if cfg.ProviderAPIKey != "sk-byok-test" {
+		t.Errorf("want ProviderAPIKey sk-byok-test, got %q", cfg.ProviderAPIKey)
+	}
+}
+
 func TestConfig_SetDefaults(t *testing.T) {
 	cfg, _ := gateway.NewConfig()
 	cfg.SetDefaults(gateway.WithDefaultProvider("openai"), gateway.WithDefaultModel("gpt-4o"))

@@ -329,10 +329,13 @@ func parseExecuteResponse(statusCode int, body []byte) (*ExecuteResponse, error)
 	resp.RecordID, _ = raw["record_id"].(string)
 	resp.RecordHash, _ = raw["record_hash"].(string)
 	resp.Provider, _ = raw["provider"].(string)
-	resp.Model, _ = raw["model"].(string)
 
-	if provResp, ok := raw["provider_response"].(map[string]any); ok {
-		resp.ProviderResponse = provResp
+	// Gateway returns the provider body in result.body.
+	if resultObj, ok := raw["result"].(map[string]any); ok {
+		if bodyObj, ok := resultObj["body"].(map[string]any); ok {
+			resp.ProviderResponse = bodyObj
+			resp.Model, _ = bodyObj["model"].(string)
+		}
 	}
 
 	resp.Content = extractContent(raw)
@@ -348,39 +351,43 @@ func parseExecuteResponse(statusCode int, body []byte) (*ExecuteResponse, error)
 }
 
 // extractContent pulls the assistant text from a gateway response map.
-// It tries OpenAI-style choices[0].message.content first, then
-// Anthropic-style content[0].text, falling back to the top-level
-// "result" or "content" string field.
+// The gateway places the provider body in result.body; falls back to a
+// legacy top-level provider_response field for compatibility.
 func extractContent(raw map[string]any) string {
-	// Top-level "content" or "result" shortcut (gateway may pre-extract).
+	// Top-level "content" shortcut (gateway may pre-extract in some modes).
 	if c, ok := raw["content"].(string); ok && c != "" {
 		return c
 	}
-	if c, ok := raw["result"].(string); ok && c != "" {
-		return c
-	}
 
-	provResp, _ := raw["provider_response"].(map[string]any)
-	if provResp == nil {
+	// Standard gateway shape: result.body
+	var body map[string]any
+	if resultObj, ok := raw["result"].(map[string]any); ok {
+		body, _ = resultObj["body"].(map[string]any)
+	}
+	// Legacy fallback: top-level provider_response
+	if body == nil {
+		body, _ = raw["provider_response"].(map[string]any)
+	}
+	if body == nil {
 		return ""
 	}
 
+	// Anthropic: content[0].text
+	if contents, ok := body["content"].([]any); ok && len(contents) > 0 {
+		if block, ok := contents[0].(map[string]any); ok {
+			if text, ok := block["text"].(string); ok {
+				return text
+			}
+		}
+	}
+
 	// OpenAI: choices[0].message.content
-	if choices, ok := provResp["choices"].([]any); ok && len(choices) > 0 {
+	if choices, ok := body["choices"].([]any); ok && len(choices) > 0 {
 		if choice, ok := choices[0].(map[string]any); ok {
 			if msg, ok := choice["message"].(map[string]any); ok {
 				if content, ok := msg["content"].(string); ok {
 					return content
 				}
-			}
-		}
-	}
-
-	// Anthropic: content[0].text
-	if contents, ok := provResp["content"].([]any); ok && len(contents) > 0 {
-		if block, ok := contents[0].(map[string]any); ok {
-			if text, ok := block["text"].(string); ok {
-				return text
 			}
 		}
 	}
