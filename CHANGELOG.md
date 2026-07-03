@@ -7,6 +7,9 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- README now links to the Go-specific docs page (`/docs/sdks/go`) instead of the generic docs root.
+
 ---
 
 ## [0.1.6] - 2026-06-25

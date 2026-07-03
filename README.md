@@ -86,7 +86,7 @@ AXEMERE_GATEWAY_URL=http://localhost:7080 AXEMERE_GATEWAY_TOKEN=your-token go ru
 ## Links
 
 - Website: [axemere.ai](https://axemere.ai)
-- Docs: [axemere.ai/docs](https://axemere.ai/docs)
+- Docs: [axemere.ai/docs](https://axemere.ai/docs/sdks/go)
 - Issues: [github.com/Axemere-LLC/axemere-go/issues](https://github.com/Axemere-LLC/axemere-go/issues)
 
 ## License
