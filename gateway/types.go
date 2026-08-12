@@ -36,6 +36,7 @@ type ExecuteRequest struct {
 	Messages        []Message
 	Provider        string // overrides Config.DefaultProvider; required if not set in Config
 	Model           string // overrides Config.DefaultModel; required if not set in Config
+	TargetHost      string // overrides the provider's registry host; required for azure_openai
 	WorkloadID      string
 	ProjectID       string
 	AccountID       string

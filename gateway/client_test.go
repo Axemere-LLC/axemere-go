@@ -177,6 +177,151 @@ func TestExecute_Success_AnthropicStyle(t *testing.T) {
 	}
 }
 
+func TestExecute_Anthropic_DefaultsMaxTokensAndSeparatesSystem(t *testing.T) {
+	var captured map[string]any
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
+			http.Error(w, "bad body", http.StatusBadRequest)
+			return
+		}
+		response := map[string]any{
+			"record_id": "rec_ant_sys",
+			"provider":  "anthropic",
+			"model":     "claude-3-opus-20240229",
+			"provider_response": map[string]any{
+				"content": []any{map[string]any{"type": "text", "text": "hi"}},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer srv.Close()
+
+	c := makeClient(t, srv.URL)
+	_, err := c.Execute(context.Background(), gateway.ExecuteRequest{
+		Messages: []gateway.Message{
+			{Role: "system", Content: "be terse"},
+			{Role: "user", Content: "hi"},
+		},
+		Provider: "anthropic",
+		Model:    "claude-3-opus-20240229",
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	action, ok := captured["action"].(map[string]any)
+	if !ok {
+		t.Fatalf("action missing or wrong shape: %v", captured["action"])
+	}
+	params, ok := action["params"].(map[string]any)
+	if !ok {
+		t.Fatalf("params missing or wrong shape: %v", action["params"])
+	}
+
+	if params["max_tokens"] == nil {
+		t.Error("want a default max_tokens for anthropic, got nil")
+	}
+	if params["system"] != "be terse" {
+		t.Errorf("want system %q lifted out of messages, got %v", "be terse", params["system"])
+	}
+	msgs, ok := params["messages"].([]any)
+	if !ok {
+		t.Fatalf("messages missing or wrong shape: %v", params["messages"])
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("want 1 message after extracting system, got %d: %v", len(msgs), msgs)
+	}
+	if msg, ok := msgs[0].(map[string]any); !ok || msg["role"] != "user" {
+		t.Errorf("want remaining message to have role=user, got %v", msgs[0])
+	}
+}
+
+func TestExecute_Anthropic_CallerMaxTokensOverridesDefault(t *testing.T) {
+	var captured map[string]any
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&captured)
+		response := map[string]any{
+			"record_id": "rec_ant_override",
+			"provider":  "anthropic",
+			"provider_response": map[string]any{
+				"content": []any{map[string]any{"type": "text", "text": "hi"}},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer srv.Close()
+
+	c := makeClient(t, srv.URL)
+	_, err := c.Execute(context.Background(), gateway.ExecuteRequest{
+		Messages: []gateway.Message{{Role: "user", Content: "hi"}},
+		Provider: "anthropic",
+		Model:    "claude-3-opus-20240229",
+		Params:   map[string]any{"max_tokens": 2048},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	action := captured["action"].(map[string]any)
+	params := action["params"].(map[string]any)
+	if params["max_tokens"] != float64(2048) {
+		t.Errorf("want caller-supplied max_tokens=2048 to win, got %v", params["max_tokens"])
+	}
+}
+
+func TestExecute_UpstreamProviderError(t *testing.T) {
+	// Reproduces a real gateway response: the gateway's own HTTP status and
+	// decision are both "success" (200, allow), but the upstream provider
+	// rejected the request — that failure only appears nested in
+	// result.status_code/result.body. Without checking it explicitly, this
+	// silently reads as a successful empty response instead of an error.
+	response := map[string]any{
+		"record_id": "rec_upstream_err",
+		"decision":  "allow",
+		"result": map[string]any{
+			"status_code": 400,
+			"body": map[string]any{
+				"type": "error",
+				"error": map[string]any{
+					"type":    "invalid_request_error",
+					"message": "max_tokens: Field required",
+				},
+			},
+		},
+		"metering": map[string]any{"tokens_in": 0, "tokens_out": 0},
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer srv.Close()
+
+	c := makeClient(t, srv.URL)
+	_, err := c.Execute(context.Background(), gateway.ExecuteRequest{
+		Messages: []gateway.Message{{Role: "user", Content: "hi"}},
+		Provider: "anthropic",
+		Model:    "claude-3-opus-20240229",
+	})
+	if err == nil {
+		t.Fatal("expected GatewayError for a nested upstream 400, got nil")
+	}
+	var gErr *gateway.GatewayError
+	if !errors.As(err, &gErr) {
+		t.Fatalf("want *GatewayError, got %T: %v", err, err)
+	}
+	if gErr.StatusCode != 400 {
+		t.Errorf("want StatusCode 400, got %d", gErr.StatusCode)
+	}
+	if !strings.Contains(gErr.Error(), "max_tokens: Field required") {
+		t.Errorf("want error message to include the upstream message, got %q", gErr.Error())
+	}
+}
+
 func TestExecute_PolicyDenied(t *testing.T) {
 	response := map[string]any{
 		"decision":  "deny",

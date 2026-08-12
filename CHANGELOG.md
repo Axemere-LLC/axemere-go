@@ -8,6 +8,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- Requests to `minimax` no longer fail — its upstream host and path were incorrect (`api.minimax.chat` + legacy native path → `api.minimax.io` + `/v1/chat/completions`).
+- `anthropic` requests no longer silently return empty content and zero metering — `max_tokens` is now sent automatically (Anthropic rejects requests that omit it), and `system`-role messages are moved out of `messages` into Anthropic's separate `system` field. Upstream provider errors (e.g. a rejected request) are now surfaced as a `GatewayError` instead of reading as an empty success.
+
+### Added
+- Support for six previously-missing providers: `azure_openai`, `qwen`, `bytedance`, `stepfun`, `bedrock`, `vertex`.
+- `ExecuteRequest.TargetHost` overrides the provider's registry host — required for `azure_openai`, which has no default host.
+
+### Changed
+- Internal request labeling (`action.type`) is now consistently `"ai.infer"` for all provider requests (was `"http"`).
+
+---
+
+## [0.1.7] - 2026-07-03
+
+### Fixed
 - README now links to the Go-specific docs page (`/docs/sdks/go`) instead of the generic docs root.
 
 ---
@@ -28,5 +43,6 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 - `gateway`: `Execute()` now correctly extracts response content and model from `result.body` (the gateway's standard response shape) instead of a `provider_response` top-level field that the gateway does not emit.
 
-[Unreleased]: https://github.com/Axemere-LLC/axemere-go/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/Axemere-LLC/axemere-go/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/Axemere-LLC/axemere-go/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/Axemere-LLC/axemere-go/releases/tag/v0.1.6

@@ -177,15 +177,28 @@ func (c *Client) buildRequest(req ExecuteRequest) (actionRequest, providerRoute,
 		return actionRequest{}, providerRoute{}, &GatewayError{Message: "unknown provider: " + provider}
 	}
 
+	targetHost := req.TargetHost
+	if targetHost == "" {
+		targetHost = route.host
+	}
+	if targetHost == "" {
+		return actionRequest{}, providerRoute{}, &GatewayError{Message: "provider " + provider + " has no default host; set ExecuteRequest.TargetHost explicitly"}
+	}
+
 	targetPath := route.path
 	if strings.Contains(targetPath, "{model}") {
 		targetPath = strings.ReplaceAll(targetPath, "{model}", model)
 	}
 
 	// Build params: model + messages first, then caller overrides.
-	params := map[string]any{
-		"model":    model,
-		"messages": req.Messages,
+	var params map[string]any
+	if provider == "anthropic" {
+		params = buildAnthropicParams(model, req.Messages)
+	} else {
+		params = map[string]any{
+			"model":    model,
+			"messages": req.Messages,
+		}
 	}
 	for k, v := range req.Params {
 		params[k] = v
@@ -242,9 +255,9 @@ func (c *Client) buildRequest(req ExecuteRequest) (actionRequest, providerRoute,
 		DelegationToken: req.DelegationToken,
 		CredentialHint:  credHint,
 		Action: actionBlock{
-			Type:       "http",
+			Type:       "ai.infer",
 			Method:     "POST",
-			TargetHost: route.host,
+			TargetHost: targetHost,
 			TargetPath: targetPath,
 			Params:     params,
 		},
@@ -257,6 +270,39 @@ func (c *Client) buildRequest(req ExecuteRequest) (actionRequest, providerRoute,
 	}
 
 	return ar, route, nil
+}
+
+// defaultAnthropicMaxTokens is sent when the caller does not supply max_tokens
+// via ExecuteRequest.Params. Anthropic's Messages API rejects requests that
+// omit it ("max_tokens: Field required"), unlike OpenAI-compatible APIs where
+// it is optional.
+const defaultAnthropicMaxTokens = 1024
+
+// buildAnthropicParams shapes params for Anthropic's Messages API: a
+// "system"-role message is not valid inside messages there, so it is lifted
+// out into a separate top-level "system" field, and max_tokens is required.
+func buildAnthropicParams(model string, messages []Message) map[string]any {
+	anthropicMessages := make([]Message, 0, len(messages))
+	var system string
+	for _, m := range messages {
+		if m.Role == "system" {
+			if system == "" {
+				system = m.Content
+			}
+			continue
+		}
+		anthropicMessages = append(anthropicMessages, m)
+	}
+
+	params := map[string]any{
+		"model":      model,
+		"messages":   anthropicMessages,
+		"max_tokens": defaultAnthropicMaxTokens,
+	}
+	if system != "" {
+		params["system"] = system
+	}
+	return params
 }
 
 // parseExecuteResponse decodes a gateway response body into ExecuteResponse or an error.
@@ -323,6 +369,25 @@ func parseExecuteResponse(statusCode int, body []byte) (*ExecuteResponse, error)
 		}
 	}
 
+	// The gateway's own HTTP status only reflects the gateway request itself —
+	// a policy "allow" is still wrapped in a 200 even when the upstream
+	// provider rejected the request (e.g. Anthropic 400s on a missing
+	// max_tokens). That failure only shows up nested in result.status_code,
+	// so it must be checked explicitly or it silently reads as success with
+	// empty content and zero metering.
+	var resultObj map[string]any
+	if ro, ok := raw["result"].(map[string]any); ok {
+		resultObj = ro
+		if upstreamStatus, ok := resultObj["status_code"].(float64); ok && upstreamStatus >= 400 {
+			bodyObj, _ := resultObj["body"].(map[string]any)
+			return nil, &GatewayError{
+				Message:      fmt.Sprintf("upstream provider returned %d: %s", int(upstreamStatus), extractErrorMessage(bodyObj)),
+				StatusCode:   int(upstreamStatus),
+				ResponseBody: bodyObj,
+			}
+		}
+	}
+
 	// Happy path: decode the response.
 	resp := &ExecuteResponse{}
 
@@ -331,11 +396,9 @@ func parseExecuteResponse(statusCode int, body []byte) (*ExecuteResponse, error)
 	resp.Provider, _ = raw["provider"].(string)
 
 	// Gateway returns the provider body in result.body.
-	if resultObj, ok := raw["result"].(map[string]any); ok {
-		if bodyObj, ok := resultObj["body"].(map[string]any); ok {
-			resp.ProviderResponse = bodyObj
-			resp.Model, _ = bodyObj["model"].(string)
-		}
+	if bodyObj, ok := resultObj["body"].(map[string]any); ok {
+		resp.ProviderResponse = bodyObj
+		resp.Model, _ = bodyObj["model"].(string)
 	}
 
 	resp.Content = extractContent(raw)
@@ -393,6 +456,25 @@ func extractContent(raw map[string]any) string {
 	}
 
 	return ""
+}
+
+// extractErrorMessage pulls a human-readable message out of a provider error
+// body shaped like {"error": {"message": "..."}} (OpenAI/Anthropic) or
+// {"error": "..."}. Falls back to the raw body when neither shape matches.
+func extractErrorMessage(body map[string]any) string {
+	if body == nil {
+		return ""
+	}
+	switch e := body["error"].(type) {
+	case map[string]any:
+		if msg, ok := e["message"].(string); ok {
+			return msg
+		}
+		return fmt.Sprintf("%v", e)
+	case string:
+		return e
+	}
+	return fmt.Sprintf("%v", body)
 }
 
 // readSSE reads Server-Sent Events from r and sends StreamChunk values to ch.
