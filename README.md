@@ -64,7 +64,6 @@ func main() {
 
 ## Get a gateway
 
-- **Free tier** — self-hosted, single user, no account required. [Install →](https://axemere.ai/docs/free-gateway)
 - **Self-Hosted** — team features, policy engine, full audit ledger. [Get started →](https://axemere.ai/docs/get-started/cp-connected)
 - **Managed** — fully hosted, multi-tenant, SOC 2 ready. [Get started →](https://axemere.ai/docs/get-started/managed-gateway)
 
