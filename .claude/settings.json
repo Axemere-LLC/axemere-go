@@ -1,0 +1,6 @@
+{
+  "extraKnownMarketplaces": {
+    "axm": { "source": { "source": "github", "repo": "Axemere-LLC/claude-plugins" } }
+  },
+  "enabledPlugins": { "axm@axm": true }
+}

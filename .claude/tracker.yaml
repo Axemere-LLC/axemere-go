@@ -1,0 +1,4 @@
+# Written by the bl plugin's tracker (see docs/tracker-design.md). Committed on purpose.
+repo: Axemere-LLC/axemere-go
+project: Axemere-LLC/6   # OWNER/NUMBER of the org Projects v2 board, or none
+labels: default

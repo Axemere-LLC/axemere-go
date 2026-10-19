@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# --- wip-skill:staleness-check v1 (managed by the /axm wip skill — do not hand-edit; re-run /axm wip to update) ---
+if [ -f .claude/wip.md ]; then
+  _wip_last_commit="$(git log -1 --format=%H -- .claude/wip.md .claude/todo.md 2>/dev/null || true)"
+  if [ -n "$_wip_last_commit" ]; then
+    _wip_commits_since="$(git rev-list --count "$_wip_last_commit"..HEAD -- . 2>/dev/null || echo 0)"
+    if [ "$_wip_commits_since" -ge 3 ]; then
+      echo "⚠️  wip: $_wip_commits_since commits since .claude/wip.md or todo.md was last touched." >&2
+      echo "   Update the tracker, or run /axm wip done, before continuing." >&2
+    fi
+  fi
+fi
+# --- end wip-skill:staleness-check ---

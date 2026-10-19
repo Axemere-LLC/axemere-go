@@ -1,3 +1,10 @@
 *.exe
 *.test
 /bin/
+
+# Claude Code — local/per-machine settings (not shared)
+.claude/settings.local.json
+.claude/worktrees/
+
+# direnv — per-developer identity, never shared
+.envrc.local
